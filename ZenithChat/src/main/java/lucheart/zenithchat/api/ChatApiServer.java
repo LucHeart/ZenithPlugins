@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.List;
 import java.util.Map;
 
 import static com.zenith.Globals.OBJECT_MAPPER;
@@ -20,6 +21,7 @@ import static lucheart.zenithchat.ZenithChatPlugin.PLUGIN_CONFIG;
  * <ul>
  *   <li>POST /chat {"message": "..."}: public chat</li>
  *   <li>POST /dm {"player": "...", "message": "..."}: DM a player</li>
+ *   <li>POST /dm {"players": ["...", "..."], "message": "..."}: DM those of them who are online</li>
  *   <li>GET /status: whether messages can be sent right now</li>
  * </ul>
  * Messages are queued, 202 means accepted, not yet sent.
@@ -27,6 +29,7 @@ import static lucheart.zenithchat.ZenithChatPlugin.PLUGIN_CONFIG;
 public final class ChatApiServer {
     // a chat message plus JSON around it, anything bigger isn't a valid request
     private static final int MAX_BODY = 4096;
+    private static final int MAX_PLAYERS = 100;
 
     private final ChatOutbox outbox;
     private HttpServer server;
@@ -37,7 +40,7 @@ public final class ChatApiServer {
 
     public record ChatRequest(String message) {}
 
-    public record DmRequest(String player, String message) {}
+    public record DmRequest(String player, List<String> players, String message) {}
 
     public synchronized boolean start() {
         if (server != null) return true;
@@ -55,8 +58,14 @@ public final class ChatApiServer {
         }));
         server.createContext("/dm", exchange -> handle(exchange, "POST", () -> {
             var request = OBJECT_MAPPER.readValue(readBody(exchange), DmRequest.class);
-            if (request == null || request.player() == null || request.message() == null) return badRequest("player and message are required");
-            return queued(outbox.dm(request.player(), request.message()));
+            if (request == null || request.message() == null || (request.player() == null) == (request.players() == null)) {
+                return badRequest("message and either player or players are required");
+            }
+            if (request.player() != null) return queued(outbox.dm(request.player(), request.message()));
+            if (request.players().size() > MAX_PLAYERS || request.players().contains(null)) return badRequest("players must be at most " + MAX_PLAYERS + " names");
+            var result = outbox.dmOnline(request.players(), request.message());
+            if (result.result() != Result.QUEUED) return queued(result.result());
+            return new Response(202, Map.of("queued", result.queued(), "offline", result.offline()));
         }));
         server.createContext("/status", exchange -> handle(exchange, "GET", () ->
             new Response(200, Map.of("online", ChatOutbox.canChat(), "queued", outbox.queued()))));

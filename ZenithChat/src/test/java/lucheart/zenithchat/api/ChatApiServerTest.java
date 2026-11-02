@@ -78,4 +78,15 @@ class ChatApiServerTest {
         assertEquals(400, send("POST", "/dm", TOKEN, "{\"player\":\"not a name\",\"message\":\"hi\"}").statusCode());
         assertEquals(400, send("POST", "/dm", TOKEN, "{\"player\":\"Steve\",\"message\":\"  \"}").statusCode());
     }
+
+    @Test
+    void rejectsBadBulkDms() throws Exception {
+        assertEquals(400, send("POST", "/dm", TOKEN, "{\"player\":\"Steve\",\"players\":[\"Alex\"],\"message\":\"hi\"}").statusCode());
+        assertEquals(400, send("POST", "/dm", TOKEN, "{\"players\":[],\"message\":\"hi\"}").statusCode());
+        assertEquals(400, send("POST", "/dm", TOKEN, "{\"players\":[\"Steve\",\"not a name\"],\"message\":\"hi\"}").statusCode());
+        assertEquals(400, send("POST", "/dm", TOKEN, "{\"players\":[\"Steve\",null],\"message\":\"hi\"}").statusCode());
+        assertEquals(400, send("POST", "/dm", TOKEN, "{\"players\":[\"Steve\"],\"message\":\" \"}").statusCode());
+        var tooMany = "\"a\",".repeat(101);
+        assertEquals(400, send("POST", "/dm", TOKEN, "{\"players\":[" + tooMany.substring(0, tooMany.length() - 1) + "],\"message\":\"hi\"}").statusCode());
+    }
 }

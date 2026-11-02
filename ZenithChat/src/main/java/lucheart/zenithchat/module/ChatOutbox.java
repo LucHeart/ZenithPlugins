@@ -2,10 +2,18 @@ package lucheart.zenithchat.module;
 
 import com.zenith.Proxy;
 import com.zenith.util.ChatUtil;
+import org.geysermc.mcprotocollib.protocol.data.game.PlayerListEntry;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.ServerboundChatPacket;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.stream.Collectors;
 
+import static com.zenith.Globals.CACHE;
 import static com.zenith.Globals.CONFIG;
 import static lucheart.zenithchat.ZenithChatPlugin.LOG;
 import static lucheart.zenithchat.ZenithChatPlugin.PLUGIN_CONFIG;
@@ -36,6 +44,13 @@ public final class ChatOutbox {
 
     private record Message(String chat, String description) {}
 
+    /** What {@link #dmOnline} did. With a result other than QUEUED nothing was queued. */
+    public record BulkResult(Result result, List<String> queued, List<String> offline) {
+        static BulkResult failed(Result result) {
+            return new BulkResult(result, List.of(), List.of());
+        }
+    }
+
     /** Queues a public chat message. With allowCommands a leading "/" runs it as a server command. */
     public Result say(String message, boolean allowCommands) {
         message = message.strip();
@@ -48,11 +63,54 @@ public final class ChatOutbox {
         if (!ChatUtil.isValidPlayerName(player)) return Result.INVALID;
         message = message.strip();
         if (message.isEmpty()) return Result.INVALID;
-        // same as ChatUtil.getWhisperChatPacket, built here to check the length instead of cutting it off
-        return offer("/" + CONFIG.client.extra.whisperCommand + " " + player + " " + message, "DM to " + player);
+        return offer(whisper(player, message), "DM to " + player);
     }
 
-    private Result offer(String raw, String description) {
+    /**
+     * Queues the same DM to every player in the list who is online, skipping the account itself.
+     * Either all of them are queued or none, so a half sent notification doesn't happen.
+     */
+    public synchronized BulkResult dmOnline(Collection<String> players, String message) {
+        message = message.strip();
+        if (players.isEmpty() || message.isEmpty() || !players.stream().allMatch(ChatUtil::isValidPlayerName)) return BulkResult.failed(Result.INVALID);
+        for (String player : players) {
+            if (whisper(player, message).length() > MAX_LENGTH) return BulkResult.failed(Result.TOO_LONG);
+        }
+        if (!canChat()) return BulkResult.failed(Result.OFFLINE);
+
+        var online = onlinePlayers();
+        var self = CACHE.getProfileCache().getProfile();
+        var selfName = self == null ? null : self.getName();
+        List<String> queued = new ArrayList<>();
+        List<String> offline = new ArrayList<>();
+        for (String player : players.stream().distinct().toList()) {
+            if (player.equalsIgnoreCase(selfName)) continue;
+            // the tab list has the name as typed in game, a DM works with any casing
+            String name = online.get(player.toLowerCase(Locale.ROOT));
+            if (name == null) offline.add(player);
+            else if (!queued.contains(name)) queued.add(name);
+        }
+        if (queue.size() + queued.size() > Math.max(1, PLUGIN_CONFIG.maxQueuedMessages)) return BulkResult.failed(Result.QUEUE_FULL);
+        for (String name : queued) {
+            queue.add(new Message(ChatUtil.sanitizeChatMessage(whisper(name, message)), "DM to " + name));
+        }
+        return new BulkResult(Result.QUEUED, queued, offline);
+    }
+
+    /** Lowercase name to name of everyone in the tab list. */
+    private static Map<String, String> onlinePlayers() {
+        return CACHE.getTabListCache().getEntries().stream()
+            .map(PlayerListEntry::getName)
+            .filter(name -> name != null && !name.isEmpty())
+            .collect(Collectors.toMap(name -> name.toLowerCase(Locale.ROOT), name -> name, (a, b) -> a));
+    }
+
+    // same as ChatUtil.getWhisperChatPacket, built here to check the length instead of cutting it off
+    private static String whisper(String player, String message) {
+        return "/" + CONFIG.client.extra.whisperCommand + " " + player + " " + message;
+    }
+
+    private synchronized Result offer(String raw, String description) {
         if (raw.length() > MAX_LENGTH) return Result.TOO_LONG;
         String chat = ChatUtil.sanitizeChatMessage(raw);
         if (chat.isBlank() || chat.equals("/")) return Result.INVALID;

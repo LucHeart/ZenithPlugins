@@ -32,10 +32,15 @@ Every request needs `Authorization: Bearer <token>`. Bodies are JSON.
 |---|---|---|
 | `POST /chat` | `{"message": "hello"}` | Public chat |
 | `POST /dm` | `{"player": "Steve", "message": "hello"}` | DM a player |
+| `POST /dm` | `{"players": ["Steve", "Alex"], "message": "hello"}` | DM those of them who are online (up to 100 names) |
 | `GET /status` | | `{"online": true, "queued": 0}` |
 
 Responses are JSON. `202 {"queued": true}` means the message was accepted and will be sent shortly, everything else
-has `{"error": "..."}`:
+has `{"error": "..."}`.
+
+A DM to a list only goes to players in the tab list, and never to the account itself. It answers
+`202 {"queued": ["Steve"], "offline": ["Alex"]}`, with the names as they appear in game. It's all or nothing: if the
+queue can't take all of them, none are sent and it answers 429.
 
 | Status | Meaning |
 |---|---|

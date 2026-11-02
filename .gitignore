@@ -1,0 +1,15 @@
+/.idea/*
+!/.idea/runConfigurations
+*.iml
+*.ipr
+/out/
+.DS_Store
+.gradle/
+build/
+# ZenithProxy's working directory of ./gradlew <Plugin>:run
+run/
+log/
+# any json-like file in the top directory, including configs, auth cache, etc.
+/*.json*
+*.tmp
+/.vscode

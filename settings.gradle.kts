@@ -9,4 +9,12 @@ plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
 
-rootProject.name = ext.properties["plugin_name"] as String
+rootProject.name = "ZenithPlugins"
+
+// one directory per plugin, named like its jar
+include(
+    "ZenithAnoying",
+    "ZenithChat",
+    "ZenithExporter",
+    "ZenithVoice",
+)

@@ -12,5 +12,8 @@
 *.html text=auto eol=lf
 *.settings text=auto eol=lf
 Jenkinsfile text=auto eol=lf
-gradlew test=auto eol=lf
+gradlew text=auto eol=lf
 *.py text=auto eol=lf
+*.kts text=auto eol=lf
+*.kt text=auto eol=lf
+*.properties text=auto eol=lf

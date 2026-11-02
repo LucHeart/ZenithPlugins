@@ -35,15 +35,8 @@ e.g. `ZenithVoice-1.0.0+26.3.0.jar`. Put it in the `plugins/` folder next to the
 Requires the `java` release channel. 1.21.4 builds run on Java 21, 26.x builds need Java 25.
 
 ## Build
-`./gradlew build -Pmc=26.3.0` → `build/libs/ZenithVoice-<version>+<mc>.jar`. Without `-Pmc` it uses `mc` from
-`gradle.properties`. Supported versions are listed in `mc_versions`; `zenith_version` picks the ZenithProxy release
-to compile against (`snapshot` for the latest `<mc>-SNAPSHOT`).
-
-## CI
-GitHub Actions (`.github/workflows/build.yml`) builds a jar for every version in `mc_versions` on each push and
-pull request; the jars are attached to the run. Pushing a semver tag like `1.0.0` (no `v`) also creates a draft
-GitHub release with all jars, to publish by hand. The tag has to match `plugin_version` in `gradle.properties`,
-otherwise the release step fails.
+Built from the root of the [ZenithPlugins](../README.md) repository: `./gradlew :ZenithVoice:build -Pmc=26.3.0` →
+`ZenithVoice/build/libs/ZenithVoice-<version>+<mc>.jar`. See the root README for MC versions, CI and releases.
 
 ## Commands
 - `zenithVoice on/off` (alias `zv`)

@@ -1,0 +1,79 @@
+groups:
+  - name: zenith
+    rules:
+      - alert: ZenithExporterDown
+        expr: up{job="zenith"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ZenithProxy metrics on {{ $labels.instance }} can't be scraped"
+
+      - alert: ZenithDisconnected
+        expr: zenith_client_state{state="disconnected"} == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ZenithProxy on {{ $labels.instance }} has been disconnected for 5 minutes"
+
+      - alert: ZenithDisconnecting
+        expr: increase(zenith_client_disconnects_total{reason!="manual"}[30m]) > 5
+        labels:
+          severity: warning
+        annotations:
+          summary: "ZenithProxy on {{ $labels.instance }} keeps disconnecting ({{ $labels.reason }})"
+
+      - alert: ZenithLoginFailing
+        expr: increase(zenith_client_login_failures_total[15m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "ZenithProxy on {{ $labels.instance }} can't log in to the account"
+
+      - alert: ZenithLowHealth
+        expr: zenith_player_health < 6 and zenith_player_alive == 1
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Account on {{ $labels.instance }} is at {{ $value }} health"
+
+      - alert: ZenithLowFood
+        expr: zenith_player_food < 6
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Account on {{ $labels.instance }} is at {{ $value }} food"
+
+      - alert: ZenithOutOfTotems
+        expr: zenith_client_state{state="online"} == 1 unless on (instance) zenith_player_inventory_items{item="totem_of_undying"} > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Account on {{ $labels.instance }} has no totems left"
+
+      - alert: ZenithPlayerInVisualRange
+        expr: zenith_world_players_nearby > 0 and zenith_player_being_controlled == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value }} player(s) near the idle account on {{ $labels.instance }}"
+
+      - alert: ZenithServerLagging
+        expr: zenith_server_tps < 10
+        for: 5m
+        labels:
+          severity: info
+        annotations:
+          summary: "Server TPS is {{ $value | printf \"%.1f\" }} on {{ $labels.instance }}"
+
+      - alert: ZenithExporterCollectorFailing
+        expr: increase(zenith_exporter_collector_errors_total[15m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Collecting {{ $labels.collector }} is failing on {{ $labels.instance }}, check the log"

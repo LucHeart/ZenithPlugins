@@ -54,12 +54,17 @@ import static lucheart.zenithvoice.ZenithVoicePlugin.PLUGIN_CONFIG;
  * <p>
  * SVC only hands out one secret per login, and the proxy usually asks before a player joins, so the
  * player's own request would be ignored by the server. The secret is kept and answered locally instead.
+ * <p>
+ * Groups, player states and volume categories are only sent in full in response to a request, and clients
+ * forget them on disconnect. A repeat request still triggers that sync, so the proxy sends one for each
+ * client that asks. The account's current group isn't part of the sync and is replayed from here.
  */
 public class ZenithVoiceModule extends Module {
     private static final Key REGISTER = Key.key("minecraft", "register");
     private static final Key REQUEST_SECRET = Key.key("voicechat", "request_secret");
     private static final Key SECRET = Key.key("voicechat", "secret");
     private static final Key UPDATE_STATE = Key.key("voicechat", "update_state");
+    private static final Key JOINED_GROUP = Key.key("voicechat", "joined_group");
     // let the proxy's connection lists settle before deciding who holds voice
     private static final long CONNECTION_SETTLE_MS = 500;
 
@@ -82,10 +87,14 @@ public class ZenithVoiceModule extends Module {
     // raw secret payload from the server for the current login, replayed to players who join later
     private volatile byte[] lastSecret;
     private volatile String lastServerHost;
+    // raw joined_group payload from the server, replayed to clients that ask for a secret
+    private volatile byte[] lastJoinedGroup;
     // direct mode: the one session currently given the real secret
     private volatile ServerSession directHolder;
     // secrets already prepared for one session, sent past onSendToPlayer untouched
     private final Set<Packet> prepared = Collections.synchronizedSet(Collections.newSetFromMap(new IdentityHashMap<>()));
+    // spectators who asked for a secret before the proxy had one, answered once it arrives
+    private final Set<ServerSession> waitingForSecret = ConcurrentHashMap.newKeySet();
 
     @Override
     public boolean enabledSetting() {
@@ -99,7 +108,10 @@ public class ZenithVoiceModule extends Module {
             // backend switch on a Velocity network -> new backend wants its own handshake.
             // Only resend the known-good version here: probing wrong versions on a server that
             // already accepted us would overwrite our stored compatibility there.
-            of(ClientConfigurationEvent.Exited.class, e -> startHandshake(false)),
+            of(ClientConfigurationEvent.Exited.class, e -> {
+                lastJoinedGroup = null;
+                startHandshake(false);
+            }),
             of(ClientDisconnectEvent.class, e -> {
                 reset();
                 forgetSecret();
@@ -156,6 +168,9 @@ public class ZenithVoiceModule extends Module {
             } catch (Exception e) {
                 error("Failed to start voice chat relay on UDP port {}", PLUGIN_CONFIG.relayPort, e);
             }
+            // the secret may have arrived while the relay was off, it still needs the real secret and target
+            byte[] secret = lastSecret;
+            if (secret != null) storeSecret(secret, lastServerHost);
         }
         connectionsChanged();
     }
@@ -165,6 +180,12 @@ public class ZenithVoiceModule extends Module {
     }
 
     private ClientboundCustomPayloadPacket onCustomPayload(ClientboundCustomPayloadPacket packet, ClientSession session) {
+        if (JOINED_GROUP.equals(packet.getChannel())) {
+            // payload ends with wrongPassword: a failed join changes nothing and would replay the error message
+            byte[] data = packet.getData();
+            if (data.length > 0 && data[data.length - 1] == 0) lastJoinedGroup = data;
+            return packet;
+        }
         if (!SECRET.equals(packet.getChannel())) return packet;
         if (!accepted) {
             accepted = true;
@@ -177,6 +198,7 @@ public class ZenithVoiceModule extends Module {
             }
         }
         storeSecret(packet.getData(), session.getHost());
+        answerWaitingSpectators(packet.getData());
         // forwarded as is, onSendToPlayer rewrites it for each player
         return packet;
     }
@@ -196,6 +218,12 @@ public class ZenithVoiceModule extends Module {
         if (spectator && !PLUGIN_CONFIG.spectatorVoice) return null;
         byte[] secret = lastSecret;
         if (secret == null) {
+            if (spectator) {
+                // spectator packets never reach the server, answer once the proxy has the secret
+                debug("Spectator requested voice chat secret before the proxy had one, answering once it arrives");
+                waitingForSecret.add(session);
+                return null;
+            }
             debug("Player requested voice chat secret before the proxy had one, forwarding to server");
             return packet;
         }
@@ -205,7 +233,20 @@ public class ZenithVoiceModule extends Module {
         }
         info("Answering {}'s voice chat secret request", spectator ? "spectator" : "player");
         session.sendAsync(new ClientboundCustomPayloadPacket(SECRET, secret));
+        restoreVoiceState(session);
         return null;
+    }
+
+    /** Gives a client that just asked for a secret what it forgot on disconnect: the server's sync and the current group. */
+    private void restoreVoiceState(ServerSession session) {
+        byte[] joinedGroup = lastJoinedGroup;
+        if (joinedGroup != null) session.sendAsync(new ClientboundCustomPayloadPacket(JOINED_GROUP, joinedGroup));
+        // only the version the server accepted: any other would overwrite our stored compatibility and stop its packets.
+        // While a handshake is still running it will trigger the sync on its own
+        int version = lastSentVersion;
+        if (!accepted || version <= 0) return;
+        sendClientPacketsAsync(new ServerboundCustomPayloadPacket(REQUEST_SECRET, ByteBuffer.allocate(4).putInt(version).array()));
+        debug("Requested voice chat sync from the server for {}", session.getName());
     }
 
     /** Every secret on its way to a player or spectator, from the server or replayed: rewrite it for that session. */
@@ -238,6 +279,15 @@ public class ZenithVoiceModule extends Module {
             : new SecretPacketData.HostPort(PLUGIN_CONFIG.relayPublicHost, port).toString();
         info("Voice chat: relaying {} over UDP port {} -> {}", session.getName(), port, server);
         return new ClientboundCustomPayloadPacket(SECRET, secret.withAddress(port, host, relay.secretFor(session)));
+    }
+
+    private void answerWaitingSpectators(byte[] secret) {
+        for (ServerSession session : waitingForSecret) {
+            waitingForSecret.remove(session);
+            if (!session.isConnected() || !PLUGIN_CONFIG.spectatorVoice) continue;
+            info("Answering spectator {}'s earlier voice chat secret request", session.getName());
+            session.sendAsync(new ClientboundCustomPayloadPacket(SECRET, secret));
+        }
     }
 
     private void storeSecret(byte[] data, String serverHost) {
@@ -298,6 +348,7 @@ public class ZenithVoiceModule extends Module {
 
     private void sessionClosed(ServerSession session) {
         disabledStates.remove(session);
+        waitingForSecret.remove(session);
         refreshDisabledState();
         relay.remove(session);
         if (directHolder == session) directHolder = null;
@@ -335,6 +386,8 @@ public class ZenithVoiceModule extends Module {
             var packet = new ClientboundCustomPayloadPacket(SECRET, SecretPacketData.parse(secret).withAddress(1, "127.0.0.1:1", junk));
             prepared.add(packet);
             session.sendAsync(packet);
+            // normally removed when it passes onSendToPlayer, this covers sends that never happen
+            EXECUTOR.schedule(() -> prepared.remove(packet), 30, TimeUnit.SECONDS);
         } catch (Exception e) {
             warn("Could not disconnect {} from voice", session.getName(), e);
         }
@@ -351,7 +404,9 @@ public class ZenithVoiceModule extends Module {
         sentDisabled = null;
         lastSecret = null;
         lastServerHost = null;
+        lastJoinedGroup = null;
         directHolder = null;
+        waitingForSecret.clear();
     }
 
     private void startHandshake(boolean probe) {

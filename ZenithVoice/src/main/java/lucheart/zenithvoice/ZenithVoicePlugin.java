@@ -11,7 +11,7 @@ import net.kyori.adventure.text.logger.slf4j.ComponentLogger;
     id = BuildConstants.PLUGIN_ID,
     version = BuildConstants.VERSION,
     description = "Simple Voice Chat through ZenithProxy: passes the force_voice_chat check and relays voice to players and spectators",
-    authors = {"luca"},
+    authors = {"LucHeart"},
     mcVersions = {BuildConstants.MC_VERSION}
 )
 public class ZenithVoicePlugin implements ZenithProxyPlugin {

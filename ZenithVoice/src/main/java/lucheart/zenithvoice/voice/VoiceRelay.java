@@ -215,9 +215,11 @@ public final class VoiceRelay {
             serverAnswered = true;
             LOG.info("Voice chat relay: server {} answered", target);
         }
+        long now = System.currentTimeMillis();
         for (Client c : clients) {
             InetSocketAddress addr = c.address;
-            if (addr == null) continue;
+            // skip clients that left voice, their address is likely stale
+            if (!c.active(now)) continue;
             var out = new ByteArrayOutputStream(plain.length + 64);
             out.write(MAGIC);
             writeByteArray(out, encrypt(c.key, plain));

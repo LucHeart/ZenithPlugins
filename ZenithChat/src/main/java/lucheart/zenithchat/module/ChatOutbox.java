@@ -40,6 +40,8 @@ public final class ChatOutbox {
         INVALID,
         /** Starts with "/" where commands aren't allowed. */
         COMMAND_NOT_ALLOWED,
+        /** A DM to the account itself, which the server refuses. */
+        SELF,
     }
 
     private record Message(String chat, String description) {}
@@ -63,6 +65,7 @@ public final class ChatOutbox {
         if (!ChatUtil.isValidPlayerName(player)) return Result.INVALID;
         message = message.strip();
         if (message.isEmpty()) return Result.INVALID;
+        if (isSelf(player)) return Result.SELF;
         return offer(whisper(player, message), "DM to " + player);
     }
 
@@ -79,12 +82,10 @@ public final class ChatOutbox {
         if (!canChat()) return BulkResult.failed(Result.OFFLINE);
 
         var online = onlinePlayers();
-        var self = CACHE.getProfileCache().getProfile();
-        var selfName = self == null ? null : self.getName();
         List<String> queued = new ArrayList<>();
         List<String> offline = new ArrayList<>();
         for (String player : players.stream().distinct().toList()) {
-            if (player.equalsIgnoreCase(selfName)) continue;
+            if (isSelf(player)) continue;
             // the tab list has the name as typed in game, a DM works with any casing
             String name = online.get(player.toLowerCase(Locale.ROOT));
             if (name == null) offline.add(player);
@@ -95,6 +96,11 @@ public final class ChatOutbox {
             queue.add(new Message(ChatUtil.sanitizeChatMessage(whisper(name, message)), "DM to " + name));
         }
         return new BulkResult(Result.QUEUED, queued, offline);
+    }
+
+    private static boolean isSelf(String player) {
+        var self = CACHE.getProfileCache().getProfile();
+        return self != null && player.equalsIgnoreCase(self.getName());
     }
 
     /** Lowercase name to name of everyone in the tab list. */

@@ -147,6 +147,7 @@ public final class ChatApiServer {
             case TOO_LONG -> badRequest("message too long, the limit is " + ChatOutbox.MAX_LENGTH + " characters (for DMs including the whisper command)");
             case INVALID -> badRequest("empty message or invalid player name");
             case COMMAND_NOT_ALLOWED -> error(403, "messages starting with / are commands, enable apiAllowCommands to allow them");
+            case SELF -> badRequest("that's the account itself, it can't DM itself");
         };
     }
 

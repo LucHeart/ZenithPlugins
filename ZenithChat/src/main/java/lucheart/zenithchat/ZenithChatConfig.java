@@ -7,6 +7,13 @@ public class ZenithChatConfig {
     /** Messages waiting to be sent before new ones are turned away. */
     public int maxQueuedMessages = 20;
 
+    /** Save every chat message the account receives, one file per day. */
+    public boolean chatLogEnabled = true;
+    /** Where the chat log files go, relative to ZenithProxy's folder unless absolute. */
+    public String chatLogDirectory = "chatlogs";
+    /** Also save messages received while in queue (mostly queue position updates). */
+    public boolean chatLogInQueue = false;
+
     /** REST endpoint for other programs, off until turned on. */
     public boolean apiEnabled = false;
     /** Address the endpoint listens on. Set to 0.0.0.0 if the caller is on another host or in Docker. */

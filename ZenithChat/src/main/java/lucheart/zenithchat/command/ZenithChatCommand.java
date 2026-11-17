@@ -10,6 +10,9 @@ import lucheart.zenithchat.module.ChatOutbox;
 import lucheart.zenithchat.module.ChatOutbox.Result;
 import lucheart.zenithchat.module.ZenithChatModule;
 
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
+
 import static com.mojang.brigadier.arguments.IntegerArgumentType.getInteger;
 import static com.mojang.brigadier.arguments.IntegerArgumentType.integer;
 import static com.mojang.brigadier.arguments.StringArgumentType.getString;
@@ -31,6 +34,8 @@ public class ZenithChatCommand extends Command {
                 Sends chat messages and DMs, one every messageDelayMs so the server doesn't kick for spam.
                 say can run server commands with a leading "/".
 
+                log: saves every chat message the account receives, one file per day in the log directory.
+
                 api: REST endpoint for other programs, see the plugin's README.
                 Callers send "Authorization: Bearer <token>", the token is generated when the api is first turned on.
                 """)
@@ -39,6 +44,9 @@ public class ZenithChatCommand extends Command {
                 "say <message>",
                 "dm <player> <message>",
                 "delay <ms>",
+                "log on/off",
+                "log queue on/off",
+                "log directory <path>",
                 "api on/off",
                 "api port <port>",
                 "api bind <address>",
@@ -71,6 +79,30 @@ public class ZenithChatCommand extends Command {
                 PLUGIN_CONFIG.messageDelayMs = getInteger(c, "ms");
                 c.getSource().getEmbed().title("Message Delay Set");
             })))
+            .then(literal("log")
+                .then(argument("toggle", toggle()).executes(c -> {
+                    PLUGIN_CONFIG.chatLogEnabled = getToggle(c, "toggle");
+                    if (!PLUGIN_CONFIG.chatLogEnabled) module().chatLog().close();
+                    c.getSource().getEmbed().title("Chat Log " + toggleStrCaps(PLUGIN_CONFIG.chatLogEnabled));
+                }))
+                .then(literal("queue").then(argument("toggle", toggle()).executes(c -> {
+                    PLUGIN_CONFIG.chatLogInQueue = getToggle(c, "toggle");
+                    c.getSource().getEmbed().title("Chat Log In Queue " + toggleStrCaps(PLUGIN_CONFIG.chatLogInQueue));
+                })))
+                .then(literal("directory").then(argument("path", greedyString()).executes(c -> {
+                    var path = getString(c, "path").strip();
+                    try {
+                        Path.of(path);
+                    } catch (InvalidPathException e) {
+                        c.getSource().getEmbed().title("Invalid Path").description(escape(e.getMessage()));
+                        return ERROR;
+                    }
+                    PLUGIN_CONFIG.chatLogDirectory = path;
+                    module().chatLog().close();
+                    c.getSource().getEmbed().title("Chat Log Directory Set")
+                        .description(escape(module().chatLog().currentFile().getParent().toString()));
+                    return OK;
+                }))))
             .then(literal("api")
                 .then(argument("toggle", toggle()).executes(c -> {
                     PLUGIN_CONFIG.apiEnabled = getToggle(c, "toggle");
@@ -116,6 +148,7 @@ public class ZenithChatCommand extends Command {
             case TOO_LONG -> embed.title("Message Too Long").description("The limit is " + ChatOutbox.MAX_LENGTH + " characters, for DMs including the whisper command");
             case INVALID -> embed.title("Empty Message Or Invalid Player Name");
             case COMMAND_NOT_ALLOWED -> embed.title("Commands Not Allowed");
+            case SELF -> embed.title("Cannot DM The Account Itself");
         }
         return ERROR;
     }
@@ -147,6 +180,8 @@ public class ZenithChatCommand extends Command {
             .addField("In Game", toggleStr(ChatOutbox.canChat()))
             .addField("Message Delay", PLUGIN_CONFIG.messageDelayMs + " ms")
             .addField("Queued", module.outbox().queued())
+            .addField("Chat Log", PLUGIN_CONFIG.chatLogEnabled ? escape(module.chatLog().currentFile().toString()) : "off")
+            .addField("Chat Log In Queue", toggleStr(PLUGIN_CONFIG.chatLogInQueue))
             .addField("API", !PLUGIN_CONFIG.apiEnabled ? "off"
                 : module.isApiRunning() ? module.apiEndpoint() : "not running")
             .addField("API Commands", toggleStr(PLUGIN_CONFIG.apiAllowCommands));

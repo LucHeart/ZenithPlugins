@@ -23,7 +23,28 @@ See the [repository README](../README.md#install).
 - `zenithChat api commands on/off` (default off): let messages from the endpoint start with `/`, i.e. run any server
   command as the account
 
+- `zenithChat log on/off` (default on): save every chat message the account receives
+- `zenithChat log queue on/off` (default off): also save messages received in queue, mostly position updates
+- `zenithChat log directory <path>` (default `chatlogs`, relative to ZenithProxy's folder)
+
 Messages longer than 256 characters (for DMs including `/msg <player> `) are turned away instead of being cut off.
+
+## Chat log
+Everything the account sees in chat is appended to one file per day, `chatlogs/2026-11-11.log` (local time):
+
+```
+[14:03:12] [PROXY] Connected
+[14:05:40] [CHAT] <Steve> hello
+[14:05:51] [DM IN] Steve whispers: are you there?
+[14:05:53] [DM OUT] You whisper to Steve: yes
+[14:07:02] [DEATH] Alex was slain by Steve
+[14:08:15] [SYSTEM] Server restarts in 5 minutes
+	second line of the same message
+[14:20:00] [PROXY] Disconnected: Server closed
+```
+
+Lines of a multi-line message after the first start with a tab. Messages are saved as plain text, without colors.
+Old files are never deleted. With Docker, put the directory on a mounted volume to keep it across container rebuilds.
 
 ## REST endpoint
 Every request needs `Authorization: Bearer <token>`. Bodies are JSON.

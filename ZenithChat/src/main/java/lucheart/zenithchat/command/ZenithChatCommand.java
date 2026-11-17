@@ -112,7 +112,7 @@ public class ZenithChatCommand extends Command {
                     return OK;
                 }))))
             .then(literal("report")
-                .then(literal("url").then(argument("url", string()).executes(c -> {
+                .then(literal("url").then(argument("url", greedyString()).executes(c -> {
                     var url = getString(c, "url").strip();
                     if (!isHttpUrl(url)) {
                         c.getSource().getEmbed().title("Invalid Address").description("Such as http://192.168.1.10:9432");
@@ -123,7 +123,7 @@ public class ZenithChatCommand extends Command {
                     c.getSource().getEmbed().title("Report Address Set");
                     return OK;
                 })))
-                .then(literal("token").then(argument("token", string()).executes(c -> {
+                .then(literal("token").then(argument("token", greedyString()).executes(c -> {
                     PLUGIN_CONFIG.reportToken = getString(c, "token").strip();
                     module().restartReporter();
                     c.getSource().getEmbed().title("Report Token Set");

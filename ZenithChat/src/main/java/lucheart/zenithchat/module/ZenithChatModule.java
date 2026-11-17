@@ -27,6 +27,7 @@ import static lucheart.zenithchat.ZenithChatPlugin.PLUGIN_CONFIG;
 public class ZenithChatModule extends Module {
     private final ChatOutbox outbox = new ChatOutbox();
     private final ChatApiServer api = new ChatApiServer(outbox);
+    private final NearbyReporter reporter = new NearbyReporter();
     private final ChatLog chatLog = new ChatLog(() -> Path.of(PLUGIN_CONFIG.chatLogDirectory), Clock.systemDefaultZone());
 
     @Override
@@ -63,12 +64,14 @@ public class ZenithChatModule extends Module {
     @Override
     public void onEnable() {
         outbox.start();
+        reporter.start();
         if (PLUGIN_CONFIG.apiEnabled) startApi();
     }
 
     @Override
     public void onDisable() {
         api.stop();
+        reporter.stop();
         outbox.stop();
         chatLog.close();
     }
@@ -79,6 +82,15 @@ public class ZenithChatModule extends Module {
 
     public ChatOutbox outbox() {
         return outbox;
+    }
+
+    public NearbyReporter reporter() {
+        return reporter;
+    }
+
+    /** Applies changed report settings, while the module runs. */
+    public synchronized void restartReporter() {
+        if (isEnabled()) reporter.restart();
     }
 
     /** Applies changed endpoint settings. Returns whether the endpoint is up, if it should be at all. */

@@ -23,4 +23,11 @@ public class ZenithChatConfig {
     public String apiToken = "";
     /** Let messages from the endpoint start with "/", i.e. run any server command as the account. */
     public boolean apiAllowCommands = false;
+
+    /** BlueMapAlert's address, such as http://192.168.1.10:9432, which gets the players around the account. Empty sends nothing. */
+    public String reportUrl = "";
+    /** BlueMapAlert's botReportToken. */
+    public String reportToken = "";
+    /** How often to look for changes (ms). Even without changes a report goes out every 5 seconds. */
+    public int reportIntervalMs = 1000;
 }

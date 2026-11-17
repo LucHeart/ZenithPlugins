@@ -10,6 +10,7 @@ import lucheart.zenithchat.module.ChatOutbox;
 import lucheart.zenithchat.module.ChatOutbox.Result;
 import lucheart.zenithchat.module.ZenithChatModule;
 
+import java.net.URI;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 
@@ -36,6 +37,9 @@ public class ZenithChatCommand extends Command {
 
                 log: saves every chat message the account receives, one file per day in the log directory.
 
+                report: sends the players around the account to BlueMapAlert, invisible ones included.
+                Give BlueMapAlert's address and its botReportToken. "report off" stops it.
+
                 api: REST endpoint for other programs, see the plugin's README.
                 Callers send "Authorization: Bearer <token>", the token is generated when the api is first turned on.
                 """)
@@ -47,6 +51,10 @@ public class ZenithChatCommand extends Command {
                 "log on/off",
                 "log queue on/off",
                 "log directory <path>",
+                "report url <url>",
+                "report token <token>",
+                "report interval <ms>",
+                "report off",
                 "api on/off",
                 "api port <port>",
                 "api bind <address>",
@@ -103,6 +111,33 @@ public class ZenithChatCommand extends Command {
                         .description(escape(module().chatLog().currentFile().getParent().toString()));
                     return OK;
                 }))))
+            .then(literal("report")
+                .then(literal("url").then(argument("url", string()).executes(c -> {
+                    var url = getString(c, "url").strip();
+                    if (!isHttpUrl(url)) {
+                        c.getSource().getEmbed().title("Invalid Address").description("Such as http://192.168.1.10:9432");
+                        return ERROR;
+                    }
+                    PLUGIN_CONFIG.reportUrl = url;
+                    module().restartReporter();
+                    c.getSource().getEmbed().title("Report Address Set");
+                    return OK;
+                })))
+                .then(literal("token").then(argument("token", string()).executes(c -> {
+                    PLUGIN_CONFIG.reportToken = getString(c, "token").strip();
+                    module().restartReporter();
+                    c.getSource().getEmbed().title("Report Token Set");
+                })))
+                .then(literal("interval").then(argument("ms", integer(200, 60000)).executes(c -> {
+                    PLUGIN_CONFIG.reportIntervalMs = getInteger(c, "ms");
+                    module().restartReporter();
+                    c.getSource().getEmbed().title("Report Interval Set");
+                })))
+                .then(literal("off").executes(c -> {
+                    PLUGIN_CONFIG.reportUrl = "";
+                    module().restartReporter();
+                    c.getSource().getEmbed().title("Reports Off");
+                })))
             .then(literal("api")
                 .then(argument("toggle", toggle()).executes(c -> {
                     PLUGIN_CONFIG.apiEnabled = getToggle(c, "toggle");
@@ -163,6 +198,15 @@ public class ZenithChatCommand extends Command {
         return OK;
     }
 
+    private static boolean isHttpUrl(String url) {
+        try {
+            var uri = URI.create(url);
+            return ("http".equals(uri.getScheme()) || "https".equals(uri.getScheme())) && uri.getHost() != null;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
     private static ZenithChatModule module() {
         return MODULE.get(ZenithChatModule.class);
     }
@@ -182,6 +226,8 @@ public class ZenithChatCommand extends Command {
             .addField("Queued", module.outbox().queued())
             .addField("Chat Log", PLUGIN_CONFIG.chatLogEnabled ? escape(module.chatLog().currentFile().toString()) : "off")
             .addField("Chat Log In Queue", toggleStr(PLUGIN_CONFIG.chatLogInQueue))
+            .addField("Report To", PLUGIN_CONFIG.reportUrl.isBlank() ? "off"
+                : escape(PLUGIN_CONFIG.reportUrl) + (module.reporter().problem() == null ? "" : " (failing: " + escape(module.reporter().problem()) + ")"))
             .addField("API", !PLUGIN_CONFIG.apiEnabled ? "off"
                 : module.isApiRunning() ? module.apiEndpoint() : "not running")
             .addField("API Commands", toggleStr(PLUGIN_CONFIG.apiAllowCommands));

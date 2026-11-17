@@ -23,6 +23,11 @@ See the [repository README](../README.md#install).
 - `zenithChat api commands on/off` (default off): let messages from the endpoint start with `/`, i.e. run any server
   command as the account
 
+- `zenithChat report url <url>`: send the players around the account to BlueMapAlert, such as
+  `http://192.168.1.10:9432`. `zenithChat report off` stops it
+- `zenithChat report token <token>`: BlueMapAlert's `botReportToken`
+- `zenithChat report interval <ms>` (default 1000): how often to look for changes
+
 - `zenithChat log on/off` (default on): save every chat message the account receives
 - `zenithChat log queue on/off` (default off): also save messages received in queue, mostly position updates
 - `zenithChat log directory <path>` (default `chatlogs`, relative to ZenithProxy's folder)
@@ -45,6 +50,21 @@ Everything the account sees in chat is appended to one file per day, `chatlogs/2
 
 Lines of a multi-line message after the first start with a tab. Messages are saved as plain text, without colors.
 Old files are never deleted. With Docker, put the directory on a mounted volume to keep it across container rebuilds.
+
+## Reporting to BlueMapAlert
+With `report url` set, the plugin sends the other players the account sees to `POST <url>/sightings`, with
+`Authorization: Bearer <report token>`. Invisible players are included: the server still sends them to the client, only
+flagged as invisible, while BlueMap leaves them out. A report goes out whenever someone comes into view, leaves it,
+moves a block or more or turns (in)visible, and at least every 5 seconds so BlueMapAlert can tell a quiet account
+from one that stopped watching.
+
+```json
+{"bot": "BaseBot", "inGame": true, "dimension": "overworld", "players": [
+  {"uuid": "069a79f4-44e9-4726-a5be-fca90e38aaf5", "name": "Notch", "x": 12.5, "y": 64, "z": -40.3, "invisible": true}
+]}
+```
+
+Out of game (disconnected or in queue) it reports `"inGame": false` and no players.
 
 ## REST endpoint
 Every request needs `Authorization: Bearer <token>`. Bodies are JSON.

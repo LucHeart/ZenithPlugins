@@ -5,6 +5,7 @@
 | Plugin | What it does |
 |---|---|
 | [ZenithChat](ZenithChat/README.md) | Chat messages and DMs from a command or a REST endpoint |
+| [ZenithChatBot](ZenithChatBot/README.md) | Answers players in chat with Claude when they mention the account |
 | [ZenithExporter](ZenithExporter/README.md) | Prometheus metrics for the proxy, the account and the server |
 | [ZenithVoice](ZenithVoice/README.md) | Simple Voice Chat through the proxy |
 | [ZenithAnoying](ZenithAnoying/README.md) | Finds the nearest bell (or any block) and spam clicks it |

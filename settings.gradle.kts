@@ -15,6 +15,7 @@ rootProject.name = "ZenithPlugins"
 include(
     "ZenithAnoying",
     "ZenithChat",
+    "ZenithChatBot",
     "ZenithExporter",
     "ZenithVoice",
 )
